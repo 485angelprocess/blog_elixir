@@ -1,0 +1,222 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h1>
+Using Oatpp as a webserver</h1>
+<p>
+<a href="https://oatpp.io/">Oat++</a> is a open source C++ web framework I wanted to check out. It is a small framework aimed for embedded devices. I want to start by just getting a basic project up and seeing some of the features.</p>
+<h2>
+Getting things running</h2>
+<p>
+I followed the step-by-step guide, starting with just a minimal port connection.</p>
+<p>
+In <code class="inline">Main.cpp</code></p>
+<pre><code class="cpp">include &quot;oatpp/web/server/HttpConnectionHandler.hpp&quot;
+
+#include &quot;oatpp/network/Server.hpp&quot;
+#include &quot;oatpp/network/tcp/server/ConnectionProvider.hpp&quot;
+
+/* Oat pp basic server */
+/* https://oatpp.io/docs/start/step-by-step/#api-low-level-components-overview */
+
+void run(){
+  /**
+    Runs server
+  **/
+  auto router = oatpp::web::server::HttpRouter::createShared();
+
+  auto connectionHandler = oatpp::web::server::HttpConnectionHandler::createShared(router);
+
+  auto connectionProvider = oatpp::network::tcp::server::ConnectionProvider::createShared({
+                                          &quot;localhost&quot;, 8010, oatpp::network::Address::IP_4
+                                                               });
+
+  oatpp::network::Server server(connectionProvider, connectionHandler);
+
+  OATPP_LOGi(&quot;noise_app&quot;, &quot;Server running on port {}&quot;, connectionProvider-&gt;getProperty(&quot;port&quot;).toString());
+
+  server.run();
+}
+
+int main(){
+
+  oatpp::Environment::init();
+
+  run();
+
+  oatpp::Environment::destroy();
+
+  return 0;
+}
+
+</code></pre>
+<p>
+I had to modify this slightly from the web pages tutorial since Oatpp has updated a bit. This enters the oatpp environment, creates an http router on a port and launches the server.</p>
+<p>
+The <code class="inline">CMakeLists.txt</code> file:</p>
+<pre><code class="cpp">cmake_minimum_required(VERSION 3.20)
+
+set(project_name noise-game)
+
+project(${project_name})
+
+set(CMAKE_CXX_STANDARD 17)
+
+# Libraries
+add_library(${project_name}-lib
+    src/AppComponent.hpp
+)
+
+find_package(oatpp 1.4.0 REQUIRED)
+
+target_link_libraries(${project_name}-lib
+    PUBLIC oatpp::oatpp
+    PUBLIC oatpp::oatpp-test
+)
+
+target_include_directories(${project_name}-lib PUBLIC src)
+
+## Add exectuables
+message(STATIC &quot;Building ${project_name}-exe&quot;)
+add_executable(${project_name}-exe
+    src/Main.cpp)
+target_link_libraries(${project_name}-exe ${project_name}-lib)
+add_dependencies(${project_name}-exe ${project_name}-lib)
+
+set_target_properties(${project_name}-lib ${project_name}-exe PROPERTIES
+        CXX_STANDARD 17
+        CXX_EXTENSIONS OFF
+        CXX_STANDARD_REQUIRED ON
+)
+
+
+</code></pre>
+<h2>
+Handler</h2>
+<p>
+This won’t do anything yet. First I added a handler:</p>
+<pre><code class="cpp">class Handler: public oatpp::web::server::HttpRequestHandler{
+  public:
+    /**
+     * Handle incoming request and return outgoing response.
+     */
+     std::shared_ptr&lt;OutgoingResponse&gt; handle(const std::shared_ptr&lt;IncomingRequest&gt;&amp; request) override{
+       return ResponseFactory::createResponse(Status::CODE_200, &quot;Hello World!&quot;);
+     }
+};
+</code></pre>
+<p>
+Then linked this to the router:</p>
+<pre><code class="cpp">... declare router
+
+// Route GET
+router-&gt;route(&quot;GET&quot;, &quot;/hello&quot;, std::make_shared&lt;Handler&gt;());
+
+
+... Create connection handler</code></pre>
+<p>
+Using curl locally replies with hello world:</p>
+<pre><code class="bash">$ curl http://localhost:8010/hello
+Hello World</code></pre>
+<p>
+Now I had an issue getting curl to run with it listed as localhost from a different computer. I believe this is an issue with my local network’s DNS setup but setting oat to run from the local ip allowed it to run across the network.</p>
+<h2>
+Retrieving structured data</h2>
+<p>
+While it’s nice that I can get basic text, I would like JSON data. Oat uses data transfer objects, which is just packaging data in a json. This is just server state data that can be easily read/written to by a client application.</p>
+<p>
+To make adding more components easier, I first created <code class="inline">AppComponent.cpp</code> to hold application components, which makes it easier to create and manage them. This is at the suggestion of the Oatpp documentation which provides a template project structure.</p>
+<p>
+<code class="inline">AppComponent.cpp</code>:</p>
+<pre><code class="cpp">#pragma once
+
+#include &quot;oatpp/json/ObjectMapper.hpp&quot;
+
+#include &quot;oatpp/web/server/HttpConnectionHandler.hpp&quot;
+#include &quot;oatpp/network/tcp/server/ConnectionProvider.hpp&quot;
+
+#include &quot;oatpp/macro/component.hpp&quot;
+
+/**
+ * Class which creates and hold Application components and registers
+ * Order of component initialization is from top to bottom
+ */
+class AppComponent{
+public:
+    /**
+     * Create connectionprovider component which listens on the port
+     */
+    OATPP_CREATE_COMPONENT(std::shared_ptr&lt;oatpp::network::ServerConnectionProvider&gt;, serverConnectionProvider)([&gt;
+      return oatpp::network::tcp::server::ConnectionProvider::createShared({&quot;localhost&quot;, 8010, oatpp::networ&gt;
+    }());
+ 
+   /**
+   *  Create Router component
+   */
+  OATPP_CREATE_COMPONENT(std::shared_ptr&lt;oatpp::web::server::HttpRouter&gt;, httpRouter)([] {
+    return oatpp::web::server::HttpRouter::createShared();
+  }());
+
+  /**
+   *  Create ConnectionHandler component which uses Router component to route requests
+   */
+  OATPP_CREATE_COMPONENT(std::shared_ptr&lt;oatpp::network::ConnectionHandler&gt;, serverConnectionHandler)([] {
+    OATPP_COMPONENT(std::shared_ptr&lt;oatpp::web::server::HttpRouter&gt;, router); // get Router component
+    return oatpp::web::server::HttpConnectionHandler::createShared(router);
+  }());
+
+  /**
+   *  Create ObjectMapper component to serialize/deserialize DTOs in Contoller&#39;s API
+   */
+  OATPP_CREATE_COMPONENT(std::shared_ptr&lt;oatpp::data::mapping::ObjectMapper&gt;, apiObjectMapper)([] {
+    auto json = std::make_shared&lt;oatpp::json::ObjectMapper&gt;();
+    return json;
+  }());
+
+};
+</code></pre>
+<p>
+This has some minor changes from the walkthrough to make it match the newest updates. </p>
+<p>
+Next I created a DTO to hold some data. Oat makes this a kind of macro generation. To me, this seems a bit kludgy for C++, but it does do the job. Trying to smush JSON into C++ is going to be a bit wonky no matter what, so maybe this is the most elegant with low overhead.</p>
+<pre><code class="c++">#include OATPP_CODEGEN_BEGIN(DTO)
+
+/**
+  * Message Data-Transfer-Object
+  */
+class MessageDto: public oatpp::DTO{
+  DTO_INIT(MessageDto, DTO /* Extends*/)
+
+  DTO_FIELD(Int32, statusCode);
+  DTO_FIELD(String, message);
+};
+
+#include OATPP_CODEGEN_END(DTO)</code></pre>
+<p>
+I can now go back in the editor and have it send the DTO instead of just a bare string.</p>
+<p>
+The <code class="inline">handle</code> method of <code class="inline">Handler</code> is now:</p>
+<pre><code class="c++">std::shared_ptr&lt;OutgoingResponse&gt; handle(const std::shared_ptr&lt;IncomingRequest&gt;&amp; request) override{
+    auto message = MessageDto::createShared();
+    message-&gt;statusCode = 1024;
+    message-&gt;message = &quot;Hello DTO!&quot;;
+    return ResponseFactory::createResponse(Status::CODE_200, message, m_objectMapper);
+}</code></pre>
+<p>
+This now gives a json response:</p>
+<pre><code class="bash">$ curl http://localhost:8010/hello
+{&quot;statusCode&quot;:1024,&quot;message&quot;:&quot;Hello DTO!&quot;}</code></pre>
+<p>
+I’m going to explore a bit more into Oatpp, but this was a pretty decent look at getting up and running. It seems like a good framework for embedded devices, not super intense to set up, and claims to be very performant. It’s also nicely self-contained so doesn’t create a headache of dependencies. The testing framework is something I want to look at some more of as well.</p>
+
+
+    </div>
+  </body>
+</html>

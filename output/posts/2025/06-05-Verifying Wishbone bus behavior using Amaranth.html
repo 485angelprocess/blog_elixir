@@ -1,0 +1,128 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h2>
+Verifying Wishbone bus behavior using Amaranth - Single Read/Write</h2>
+<p>
+As part of a design for another project, I am using a wishbone “bus” (wishbone is a methodology for bus design, not technically a bus standard).</p>
+<p>
+To start I setup a signature for the wishbone interface. I personally like having my read and write port written as <code class="inline">port.w.data</code> and <code class="inline">port.r.data</code> which is why the ports are separate. Wishbone shares other values such as address, stb, and cycle between and write.</p>
+<pre><code class="python">class WritePort(wiring.Signature):
+    def __init__(self, address_shape, data_shape):
+        super().__init__({
+            &quot;data&quot;: Out(data_shape),
+            &quot;enable&quot;: Out(1)
+        })
+
+class ReadPort(wiring.Signature):
+    def __init__(self, address_shape, data_shape):
+        super().__init__({
+            &quot;data&quot;: In(data_shape)
+        })
+
+class Bus(wiring.Signature):
+    def __init__(self, address_shape, data_shape, sel_width = 1, burst = False):
+
+        ports = {
+            &quot;w&quot;: Out(WritePort(address_shape, data_shape)),
+            &quot;r&quot;: Out(ReadPort(address_shape, data_shape)),
+            &quot;addr&quot;: Out(address_shape),
+            &quot;sel&quot;: Out(sel_width),
+            &quot;cycle&quot;: Out(1),
+            &quot;stb&quot;: Out(1),
+            &quot;ack&quot;: In(1)
+        }
+
+        if burst:
+            ports = ports | {&quot;cti&quot;: Out(3)}
+
+        super().__init__(ports)</code></pre>
+<p>
+Since wishbone offers a few optional signals, those are left as options to add. As I build more elaborate modules, I am going to add some more ports.</p>
+<h2>
+Test functions</h2>
+<p>
+With that done, I want to create a few functions to make writing tests for wishbone interfaces easy. For a client interface, I want to be able to write data to an address, and then read data from an address</p>
+<p>
+The write function is written to slot nicely into Amaranth’s testbench framework. The <code class="inline">ctx</code> object provides useful methods for working with the simulator. <code class="inline">port</code> is the port under test (usually the top level wishbone interface for the DUT). </p>
+<pre><code class="python">async def write_single(ctx, port, addr, data):
+    ctx.set(port.w.data, data)
+    ctx.set(port.addr, addr)
+    ctx.set(port.w.enable, 1)
+    ctx.set(port.stb, 1)
+    ctx.set(port.cycle, 1)
+    await ctx.tick().until(port.ack)
+    ctx.set(port.stb, 0)
+    ctx.set(port.w.enable, 0)
+    ctx.set(port.cycle, 0)</code></pre>
+<p>
+The <code class="inline">until</code> method of <code class="inline">TickTrigger</code> (returned by <code class="inline">ctx.tick()</code>) is a really helpful method. The <code class="inline">TickTrigger</code> <a href="https://amaranth-lang.org/docs/amaranth/v0.5.4/simulator.html#amaranth.sim.TickTrigger">documentation</a> is helpful for writing concise testbenches. Coming from SystemVerilog, it allows an easy flexible framework for writing tests.</p>
+<p>
+The read function is similar, but I use the <code class="inline">sample</code> method to receive data.</p>
+<pre><code class="python">async def read_single(ctx, port, addr, expect):
+    ctx.set(port.addr, addr)
+    ctx.set(port.w.enable, 0)
+    ctx.set(port.cycle, 1)
+    ctx.set(port.stb, 1)
+    data, = await ctx.tick().sample(port.r.data).until(port.ack)
+    assert data == expect
+    ctx.set(port.stb, 0)
+    ctx.set(port.cycle, 0)</code></pre>
+<p>
+For now I have the assert in the scope of the function. Some flexibility can be added by returning it instead. For unit tests I find that a simple assert is enough information, since I can then refer to the waveform, which stops right at the error condition. Some more information can be provided using a python unittest framework.</p>
+<p>
+After working on some projects for a bit, I also added a poll function. This is helpful when I want to wait for some register to be ready before checking other values.</p>
+<pre><code class="python">async def poll(ctx, port, addr, until):
+    counter = 0
+    while await read_single(ctx, port, addr) != until:
+        counter += 1
+    return counter</code></pre>
+<p>
+ This function waits for a bus read to return a value <code class="inline">until</code>.</p>
+<p>
+To do a testbench, I can use these functions to check my module’s functionality:</p>
+<pre><code class="python">class Device(wiring.Component):
+    bus: Bus(32, 32)
+
+    def elaborate(self, platform):
+        m = Module()
+
+        # Do work here
+
+        return m  
+
+dut = Module()
+dut.submodules.device = device = Device()
+
+async def wb_testbench(ctx):
+    # Write data to component at address 10
+    await write_single(ctx, device.bus, 10, 2)
+    # Read data from address 10
+    assert await read_single(ctx, device.bus, 10) == 2
+    # Wait for some register at address 11 to be set
+    await poll(ctx, device.bus, 11)
+    # Check another register at address 15
+    assert await read_single(ctx, device.bus, 15) == 10
+
+sim = Simulator(dut)
+sim.add_clock(1e-8)
+sim.add_testbench(wb_testbench)
+
+with sim.write_vcd(&quot;bench.vcd&quot;):
+    sim.run()</code></pre>
+<p>
+This doesnt check for wishbone features and expected failures, but is a fast way to check for functionality. When developing a bus based module system, it greatly speeds up development time to have a flexible testing framework.</p>
+<h1>
+</h1>
+
+
+    </div>
+  </body>
+</html>

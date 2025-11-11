@@ -1,0 +1,76 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h1>
+Running Embedded Rust in QEMU</h1>
+<p>
+I am interested in expanding my ability to write more stable and flexible embedded programs. As part of that, I am improving my knowledge of virtualization options. For rust applications a somewhat established approach is to use QEMU virtualization. QEMU is a very flexible virtualization platform, which I have used before for faster development of a raspberry pi application.</p>
+<p>
+I am using <a href="https://docs.rust-embedded.org/book/start/qemu.html">The Embedded Rust Book</a> as a reference.</p>
+<p>
+To start with a cortex-m project, it is good to start with the templates. A new project can be pulled from them using <code class="inline">cargo generate</code></p>
+<pre><code class="powershell">  cargo generate --git https://github.com/rust-embedded/cortex-m-quickstart</code></pre>
+<p>
+The initial <code class="inline">main.rs</code> is</p>
+<pre><code class="rust">#![no_std]
+#![no_main]
+
+use panic_halt as _;
+
+use cortex_m_rt::entry;
+
+#[entry]
+fn main() -&gt; ! {
+    loop {
+        // your code goes here
+    }
+}</code></pre>
+<p>
+This does not linke the <code class="inline">std</code> crate, but to the subset <code class="inline">core</code> crate. The <code class="inline">main</code> function is set explicitly as the entry point.</p>
+<p>
+This code is fine, but it doesn’t do anything. To get started let’s add a debug print function, and a exit indicator for the debugger.</p>
+<pre><code class="rust">#![no_main]
+#![no_std]
+
+use panic_halt as _;
+
+use cortex_m_rt::entry;
+use cortex_m_semihosting::{debug, hprintln};
+
+#[entry]
+fn main() -&gt; ! {
+    hprintln!(&quot;Hello, world!&quot;).unwrap();
+
+    // exit QEMU
+    // NOTE do not run this on hardware; it can corrupt OpenOCD state
+    debug::exit(debug::EXIT_SUCCESS);
+
+    loop {}
+}</code></pre>
+<p>
+<code class="inline">hprintln!</code> is a macro which is printed using semihosting to QEMU’s host. This would also display in a debug session.</p>
+<p>
+To output the binary, the package just has to be built.</p>
+<pre><code class="rust">cargo build</code></pre>
+<p>
+Then qemu can be run using</p>
+<pre><code class="bash">$ qemu-system-arm \
+  -cpu cortex-m3 \
+  -machine lm3s6965evb \
+  -nographic \
+  -semihosting-config enable=on,target=native \
+  -kernel target/thumbv7m-none-eabi/debug/examples/cortex_demo</code></pre>
+<p>
+This outputs the debug message directly to console, and exits gracefully.</p>
+
+
+    </div>
+  </body>
+</html>

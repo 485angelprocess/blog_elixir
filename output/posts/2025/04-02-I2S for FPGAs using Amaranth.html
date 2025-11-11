@@ -1,0 +1,52 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h1>
+I2S for FPGAs using Amaranth</h1>
+<p>
+I2S (Inter-intergrated Circuit Sound) is a serial standard for sending and receiving PCM audio between digital circuit components. The normal use case is to send audio data to a line-level DAC or amplifier, or to receive audio data from an ADC. I am working on an audio processor which uses a PCM5102 as a DAC output, and a PCM1863 as an ADC. I am using an FPGA as a flexible audio processor.</p>
+<p>
+For this project I am using <a href="amaranth-lang.org">amaranth-lang</a> which is a python based framework for developing HDL. It allows faster development, and setting up test frameworks easily. There is also quite a lot of work put in to aim amaranth at developing flexible and reusable modules.</p>
+<p>
+To start I am using two streams of data. Each stream has a data port, and a valid and ready port. A stream is valid if data can be pushed out, and ready flags that the sink device can receive that data. In amaranth this can be written as a <code class="inline">Signature</code></p>
+<pre><code class="python">class AudioStream(wiring.Signature):
+    def __init__(self, shape):
+        super().__init__({
+            &quot;tdata&quot;: Out(shape),
+            &quot;tvalid&quot;: Out(1),
+            &quot;tready&quot;: In(1)
+        })</code></pre>
+<p>
+Amaranth now provides a stream class, but a custom one with a “t” prefix helps let Vivado abstract the stream as an AXIS stream. This makes block diagrams cleaner.</p>
+<p>
+Using the stream signature as a port a basic i2s initializator looks like this:</p>
+<pre><code class="python">class I2sOut(wiring.Component):
+    def __init__(self, shape, period = 10, depth = 16, mono = True, ws_switch = 1):
+        self.period = period # Default period of SCK
+        self.depth = depth # Width of audio data sent out
+        self.shape = shape # Shape of stream data, stream data below width is ignored
+        self.mono = mono # If set to mono, left channel is sent out to both i2s channels, right stream is ignored
+        self.ws_switch = ws_switch # On which bit to switch WS, 0 is I2S, 1 is left-aligned
+
+        super().__init__({
+            &quot;left&quot;: In(AudioStream(shape)),
+            &quot;right&quot;: In(AudioStream(shape)),
+            &quot;sck&quot;: Out(1), # Data clock
+            &quot;bck&quot;: Out(1), # PLL clock
+            &quot;ws&quot;: Out(1),  # Word select (left/right)
+            &quot;sd&quot;: Out(1)   # Data out
+        })</code></pre>
+<p>
+Now for implementation. To start we need a BCK clock out.</p>
+
+
+    </div>
+  </body>
+</html>

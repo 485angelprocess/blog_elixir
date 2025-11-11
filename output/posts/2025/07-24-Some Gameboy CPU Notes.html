@@ -1,0 +1,242 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h1>
+Some Gameboy CPU Notes</h1>
+<p>
+This is going to be a more thinking out loud post. I have been working on the CPU for an FPGA emulator. Gameboy has 245 opcodes (+255 additional operations), which are the result of a few iterations of 8-bit CISC CPUs. So the design reasons for the instructions are fairly obfuscated. Each instruction consists of an opcode, which usually implies at least one register. Then the instruction can have 0-2 arguments, and may require additional cycles to finish operation. </p>
+<p>
+The processor has 8 8-bit register, which can also be used as 4 16-bit registers. There are also 2 additional 16-bit registers the program counter (PC) and the stack pointer (SP).</p>
+<p>
+The core processor has to read a byte from the program counter, and then load in additional arguments. When all arguments are ready the processor can do an operation. These operations can be setting a register to a value, writing to memory, reading from memory or writing to the ALU bus. The ALU (arithmetic logic unit) contains the logic for things like adding, subtracting and multiplication.</p>
+<p>
+Some example instructions:</p>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: left;">
+Instruction      </th>
+      <th style="text-align: left;">
+OpCode      </th>
+      <th style="text-align: left;">
+Arguments      </th>
+      <th style="text-align: left;">
+Actions      </th>
+      <th style="text-align: left;">
+Bus      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: left;">
+LD B, n      </td>
+      <td style="text-align: left;">
+0x06      </td>
+      <td style="text-align: left;">
+1 - 8 bit immediate      </td>
+      <td style="text-align: left;">
+Put 8-bit immediate value into register B.      </td>
+      <td style="text-align: left;">
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+LD A, (HL)      </td>
+      <td style="text-align: left;">
+0x7E      </td>
+      <td style="text-align: left;">
+0      </td>
+      <td style="text-align: left;">
+Load value from memory at address HL (the address formed by using the H and L register as a 16 bit number) into register A      </td>
+      <td style="text-align: left;">
+Data Read      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+LD (HL), C      </td>
+      <td style="text-align: left;">
+0x71      </td>
+      <td style="text-align: left;">
+0      </td>
+      <td style="text-align: left;">
+Write the value of register C to memory at address HL      </td>
+      <td style="text-align: left;">
+Data Write      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+LD A, (nn)      </td>
+      <td style="text-align: left;">
+0xFA      </td>
+      <td style="text-align: left;">
+2 - 16 bit immediate      </td>
+      <td style="text-align: left;">
+Load value from memory at address nn into register A      </td>
+      <td style="text-align: left;">
+Data Read      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+LD (\$FF00 +C), A      </td>
+      <td style="text-align: left;">
+0xE2      </td>
+      <td style="text-align: left;">
+0      </td>
+      <td style="text-align: left;">
+Load value from register A into memory at address 0xFF00 + the value of register C, into register A      </td>
+      <td style="text-align: left;">
+Data Write      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+PUSH AF      </td>
+      <td style="text-align: left;">
+0xF5      </td>
+      <td style="text-align: left;">
+0      </td>
+      <td style="text-align: left;">
+Push the 16-bit contents of register A and register F onto the point in memory set by the stack pointer. This decrements the stack pointer twice (Increasing the stack size by 2 bytes)      </td>
+      <td style="text-align: left;">
+Data write      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+POP AF      </td>
+      <td style="text-align: left;">
+0xF1      </td>
+      <td style="text-align: left;">
+0      </td>
+      <td style="text-align: left;">
+Pop the stack into the contents of register A and register F. This increments the stack pointer twice (decreasing the stack size by 2 bytes)      </td>
+      <td style="text-align: left;">
+Data Read      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Add A, B      </td>
+      <td style="text-align: left;">
+0x80      </td>
+      <td style="text-align: left;">
+0      </td>
+      <td style="text-align: left;">
+The ALU adds registers A and B, the contents is stored in register A. Sets flags Z if A+B==0, and carry flags.      </td>
+      <td style="text-align: left;">
+ALU      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Add A, (HL)      </td>
+      <td style="text-align: left;">
+0x86      </td>
+      <td style="text-align: left;">
+0      </td>
+      <td style="text-align: left;">
+The ALU address register A to the value stored at address HL, sets flags      </td>
+      <td style="text-align: left;">
+ALU, Data Read      </td>
+    </tr>
+  </tbody>
+</table>
+<p>
+That’s a few of them. So there’s a variety of operations, with different arguments and bus transactions. I would like to be able to write the processor to functionally run code, to have testable functionality and to be able to run at an arbitary clock rate. I also want it to be easy to add and edit instructions, because it’ll be easy to make mistakes.</p>
+<p>
+Because I’m using amaranth, which is based on python, I’m trying to leverate objects to make this easier. It’s definitely not there, I would like there to be a clearer separation of abstraction, but there’s some things I like about it.</p>
+<p>
+First I created a base class that provides instruction info, and amaranth expressions that can do things like start a bus transaction, and then wait for the bus transaction to finish, then do an operation.</p>
+<pre><code class="python">class InstructionBase(object):
+    # Provide info about arguments, idle cycles
+    def arg_length(self):
+        ...
+    def cycle_length(self):
+        ...
+
+    # Run operation
+    def loaded(self, ctx):
+        # Returns amaranth expression that evaluates to true
+        # if the command is fully loaded
+        ...
+    
+    def on_load(self, ctx):
+        # Returns amaranth expression that is done combinatorally
+        # When command is loaded
+        ...
+
+    def requires(self, ctx):
+        # Returns amaranth expression that evaluates to true
+        # if the operation can be ran
+        ...
+
+    def operate(self, ctx):
+        # Returns amaranth expression that is done synchronously
+        # When requirements are met
+        ...</code></pre>
+<p>
+<code class="inline">ctx</code> is a object which provides the processors state info. It includes registers, the arg counter and the bus access.</p>
+<p>
+For a hardcoded example, say I wanted to to run <code class="inline">LD A,(HL)</code>. This means when the processor receives opcode <code class="inline">0x7E</code>, the instruction should start read transaction with the bus address set to the value of HL. When the read instruction finishes, the value of A should be set to the bus’s read value. </p>
+<pre><code class="python">class Load_A_HL(InstructionBase):
+    def arg_length(self):
+        return 0 # Only the opcode is needed
+    
+    def cycle_length(self):
+        return 1 # This instruction takes 2 system clock pulses to run
+
+    def loaded(self, ctx):
+        # Is true if all arguments were loaded
+        return ctx.arg_counter() &gt;= self.arg_length())
+
+    def on_load(self, ctx):
+        # if all instructions are loaded,
+        # then enable bus read
+        return [
+            ctx.mem.addr.eq(ctx.get_wide(&quot;HL&quot;),
+            ctx.mem.r_en.eq(1)
+        ]
+
+    def requires(self, ctx):
+        # Is true if bus has finished reading
+        return ctx.mem.r_ready
+
+    def operate(self, ctx):
+        # Set register A to result
+        return ctx.get_reg(&quot;A&quot;).eq(ctx.mem.r_data)
+</code></pre>
+<p>
+Now the processor can have a setup which checks for the opcode, and has functions on given conditions. This is meant to be have a generic interface for instructions.</p>
+<pre><code class="python">iset = # Lookup table of opcode: InstructionBase object
+ctx = # Object to access processor state
+
+arg_length = Signal(range(2)) # How many args we expect
+cycle_length = Signal(range(16)) # How many clock cycles this instruction takes
+
+opcode = Signal(8) # Loaded in from program bus
+
+with m.Switch(opcode):
+    for o in iset:
+        # For each instruction
+        with m.Case(o):
+            # Assign signals
+            m.d.comb += arg_length.eq(iset[o].arg_length())
+            m.d.comb += cycle_length.eq(iset[o].cycle_length())
+            
+            # If loaded, do something
+            with m.If(iset[o].loaded(ctx)):
+                m.d.comb += iset[o].on_load(ctx)
+
+            # If everything is ready, do something
+            with m.If(iset[o].requires(ctx)):
+                m.d.sync += iset[o].operate(ctx)</code></pre>
+<p>
+This is somewhat comprehensible, and it means that the instruction set can be defined as dictionary lookup containing objects. </p>
+
+
+    </div>
+  </body>
+</html>

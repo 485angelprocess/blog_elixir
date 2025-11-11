@@ -1,0 +1,255 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h2>
+Serial Driver with Dual and Quad modes</h2>
+<p>
+I am working on a project which involves fast reading from an on-board flash chip. This means having a serial driver with an AXI bus interface which can run standard, dual and quad serial read and write commands.</p>
+<h2>
+Test device</h2>
+<p>
+To test behavior, I need a object which parses spi data and can easily report what was received. I can also load in responses.</p>
+<h2>
+Module Design</h2>
+<p>
+First, I breakdown the module into six operating states:</p>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: left;">
+State      </th>
+      <th style="text-align: left;">
+Condition      </th>
+      <th style="text-align: left;">
+Behavior      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: left;">
+Idle      </td>
+      <td style="text-align: left;">
+No data in/out      </td>
+      <td style="text-align: left;">
+CS is held high, no data is sent      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Standard      </td>
+      <td style="text-align: left;">
+Data on standard fifo      </td>
+      <td style="text-align: left;">
+CS is low, data is written to mosi, data is read from miso      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Dual write      </td>
+      <td style="text-align: left;">
+Data in dual transmit fifo      </td>
+      <td style="text-align: left;">
+CS is low, data is written on io0 and io1, no data is read in      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Dual read      </td>
+      <td style="text-align: left;">
+Data flagged as dual read      </td>
+      <td style="text-align: left;">
+CS is low, data is read from io0 and io1, no data is written out      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Quad write      </td>
+      <td style="text-align: left;">
+Data in quad transmit fifo      </td>
+      <td style="text-align: left;">
+CS is low, data is written on io0, io1, io2 and io3, no data is read in      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Quad read      </td>
+      <td style="text-align: left;">
+Data is flagged as quad read      </td>
+      <td style="text-align: left;">
+CS is low, data is read from io0, io1, io2 and io3, no data is written out      </td>
+    </tr>
+  </tbody>
+</table>
+<p>
+From the controller side, I want to be able to load commands in, have them run, and know when data is finished. So I need buffers for data, and flags which indicate if a transaction has finished and if data is ready.</p>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: left;">
+Reg      </th>
+      <th style="text-align: left;">
+R/W      </th>
+      <th style="text-align: left;">
+Use      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: left;">
+Reset      </td>
+      <td style="text-align: left;">
+Write only      </td>
+      <td style="text-align: left;">
+Software reset      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Flush      </td>
+      <td style="text-align: left;">
+Write only      </td>
+      <td style="text-align: left;">
+Flush all buffers      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Inhibit      </td>
+      <td style="text-align: left;">
+RW      </td>
+      <td style="text-align: left;">
+While set, prevents data from sending, automatically set when transaction is finished      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Length of transaction      </td>
+      <td style="text-align: left;">
+RW      </td>
+      <td style="text-align: left;">
+Number of bytes to write and read      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Write address      </td>
+      <td style="text-align: left;">
+RW      </td>
+      <td style="text-align: left;">
+Address of byte to edit      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Write data      </td>
+      <td style="text-align: left;">
+RW      </td>
+      <td style="text-align: left;">
+Read or write to byte in spi buffer      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Write width      </td>
+      <td style="text-align: left;">
+RW      </td>
+      <td style="text-align: left;">
+Read or write to width of data in spi buffer      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Write r/w      </td>
+      <td style="text-align: left;">
+RW      </td>
+      <td style="text-align: left;">
+Set data to a read or write value, use to mask out dual and quad transaction      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Transaction done      </td>
+      <td style="text-align: left;">
+Read only      </td>
+      <td style="text-align: left;">
+Is set when transaction has finished      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Receive data fifo      </td>
+      <td style="text-align: left;">
+Read only      </td>
+      <td style="text-align: left;">
+Loads a byte of data from receive data fifo      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Receive data occupancy      </td>
+      <td style="text-align: left;">
+Read only      </td>
+      <td style="text-align: left;">
+Number of bytes in receive data buffer      </td>
+    </tr>
+  </tbody>
+</table>
+<p>
+The AMD Quad SPI IP uses fifo interfaces on both transmit and receiving sides. While this makes a minimal interface, and fifos are more efficient than arrays, it leads to some design issues. First, the Quad mode infers address length, dummy data length and other information based on the first byte of data. This is opaque from the controller end. It also means that every command must be reloaded after a transaction is finished. For my needs, I am trying to sequence reads, with as little interruption as possible. Using a non-volatile write buffer reduces bus transactions between commands.</p>
+<p>
+I am leaving off some functionality from the AMD Quad SPI, such as more fine grained fifo information, interrupts and LSB/MSB setting.</p>
+<p>
+To make the interface easier/faster, I am also adding a few convenience registers.</p>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: left;">
+Reg      </th>
+      <th style="text-align: left;">
+R/W      </th>
+      <th style="text-align: left;">
+Use      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: left;">
+Set command      </td>
+      <td style="text-align: left;">
+Write only      </td>
+      <td style="text-align: left;">
+Sets the first byte of the transaction to this byte, sets the width to standard, and the mask to write      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Set long address (32 bits)      </td>
+      <td style="text-align: left;">
+Write only      </td>
+      <td style="text-align: left;">
+Sets bytes 1, 2, 3, 4 to address      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Set short address (24 bits)      </td>
+      <td style="text-align: left;">
+Write only      </td>
+      <td style="text-align: left;">
+Sets byte 1, 2, 3 to address      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Set mode      </td>
+      <td style="text-align: left;">
+Write only      </td>
+      <td style="text-align: left;">
+Sets data 1-end to mode (standard, dual or quad)      </td>
+    </tr>
+    <tr>
+      <td style="text-align: left;">
+Set write length      </td>
+      <td style="text-align: left;">
+Write only      </td>
+      <td style="text-align: left;">
+Sets data 0-N-1 to write and data N-end to read      </td>
+    </tr>
+  </tbody>
+</table>
+<p>
+These registers handle the main use cases of the flash memory, but keeps finer operations exposed for other use cases.</p>
+
+
+    </div>
+  </body>
+</html>

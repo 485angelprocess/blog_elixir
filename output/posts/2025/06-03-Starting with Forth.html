@@ -1,0 +1,44 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h1>
+Starting with Forth</h1>
+<p>
+I somehow gotten into reading about Forth, a programming language first developed by Charles Moore in 1970. There are quite a lot variations of Forth which have been developed. Part of Forth was an editing environment built specifically around it. At some point Moore was also interested in making it a standalone OS or OS-less program and environment. I checked out two versions, Gforth, and SwiftForth. I am interested in looking into ColorForth, which is Moore’s ongoing project, although the implementations for that are hardware specific. Gforth is an open source implementation, while SwiftForth is a more profressional proprietary implementation.</p>
+<p>
+The installation instructions for Gforth are here: <a href="https://gforth.org/">https://gforth.org/</a>. Using the tarball mirror:</p>
+<pre><code class="bash">$ wget https://www.complang.tuwien.ac.at/forth/gforth/Snapshots/current/gforth.tar.xz
+$ tar xvfJ gforth.tar.xz
+$ cd gforth-*
+$ ./install-deps.sh
+$ ./configure
+$ make
+$ sudo make install</code></pre>
+<p>
+Starting with a simple hello world. First I can invoke the Gforth environment with <code class="inline">gforth</code>. Then hello world is <code class="inline">.&quot; hello, world&quot;</code>, Forth is whitespace sensitive, so the leading space of hello is required. Note that <code class="inline">.&quot;</code> is a word, which waits for the end of the word with a special delimiter <code class="inline">&quot;</code>, which is why <code class="inline">.&quot;hello world&quot;</code> fails, because the interpreter tries to read <code class="inline">.&quot;hello</code> as the first word.</p>
+<p>
+Next I can start working with the stack. One of the things that interested me in Forth is it designed much less abstractly with regards to how computers process information than later languages. It’s nice to see some snapshots of how that abstraction has developed over time within programming language methodology. Any number that is typed is put on the stack, and the stack is displayed with <code class="inline">.s</code> or the the top of the stack with <code class="inline">.</code> . Words consume their stack, which is much closer to what is happening at the assembly level, where arguments are placed in the arguments proceeding the call of a routine or function.</p>
+<p>
+Forth has arithmetic words, <code class="inline">+</code>, <code class="inline">-</code>, <code class="inline">*</code>, <code class="inline">/</code> and <code class="inline">mod</code>. They act on the top two stack items. <code class="inline">2 2 +</code> will result in 4 being at the top of the stack. <code class="inline">/mod</code> produced two result, the result and the remainder of the integer division. There is also the <code class="inline">negate</code> word which flips the sign of the top of the stack.</p>
+<p>
+Stack manipulation is done with several words. <code class="inline">drop</code> removes the top of the stack. <code class="inline">dup</code> duplicates the top. <code class="inline">over</code> duplicates the bottom of the stack into the top.  <code class="inline">swap</code> switches the first and second values in the stack, and <code class="inline">rot</code> rotates the top three stack matrices.</p>
+<p>
+Colon definitions can be used to create procedures and functions.</p>
+<pre><code class="forth">: squared ( n -- n^2 )
+    dup * ;</code></pre>
+<p>
+<code class="inline">( n -- n^2 )</code> is a comment. This definition creates a new word which will act on the stack. There is some additional discussion of definitions versus macros on this page <a href="https://net2o.de/gforth/Colon-Definitions.html">Colon Definitions (Gforth Manual)</a>. A defined word can be used as any other word. The do</p>
+<p>
+That’s some of the basics, it was pretty easy to get running, next I want to look into the debugging options. Initially I’m getting slightly confused on how to use them, so it’ll be another day.</p>
+
+
+    </div>
+  </body>
+</html>

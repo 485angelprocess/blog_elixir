@@ -1,0 +1,23 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h1>
+Sculpture with Wireless Responsive Audio</h1>
+<p>
+I am collaborating with an artist for a show, we are putting a light up sculpture into the water for the duration of the event, and having it response to audio played on the beach. For this I wanted to have a closeby microphone somewhere safe, and then sending data wirelessly out to the sculpture. This is a modification of the original sculpture which had a local microphone.</p>
+<p>
+For this I am using two Feather-S2 boards. The one on the beach is acting as a wireless server and access point. This board has an i2s microphone. It calculates the loudness (adding the absolute value of samples, with some extra filtering). The board out with the sculpture is running off a battery and is polling with GET requests. Each GET request gives a loudness value, which it uses to update the brightness of the neopixels. It’ll have some additional logic for running when requests fail (which is expected given the conditions).</p>
+<p>
+For the server I used the basic example AP example.</p>
+
+
+    </div>
+  </body>
+</html>

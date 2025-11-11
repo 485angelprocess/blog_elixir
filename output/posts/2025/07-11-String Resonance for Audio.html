@@ -1,0 +1,372 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h1>
+String Resonance VST</h1>
+<p>
+I’m interested in audio effects using string resonance. Digitally modeling a string can be done using a delay line and a low pass filter.  This is the Karplus-Strong algorithm,</p>
+<p>
+$$
+y(n)=x(n)+h(x(n-K))
+\
+y(n):= Output
+\
+x(n):=Input
+\
+x(n - K):=Delay
+\
+h(v):=Filter
+$$</p>
+<p>
+The length of the delay line represents the time a soundwave takes to travel to and from the length of a string. The filter represents the physical dampening of instrument elements (the nut, the bridge, the body). A real instrument has multiple resonant delay lines, but we can make fictional and interesting string models by layering multiple blocks.</p>
+<h2>
+Pure Data Model</h2>
+<p>
+A quick testing model can be made in pure data. This allows a quick way to get baseline parameters and play with the audio. The input is a short burst of noise, which simulates a pluck.</p>
+<p>
+  <img src="C:UsersmagenDocumentsBlogResourcesstring_resonancepd_string.png" alt="pd_string.png">
+ng.png)</p>
+<p>
+With a basic model to go back to, I can start implementing on different platforms to improve playability.</p>
+<h2>
+Rust implementation</h2>
+<p>
+The next step I wanted to get into a rust implementation, and put it into a nice plugin format so it can be used with a DAW. It’s looking like <code class="inline">nih-plugin</code> is the most built out and supported framework for CLAP and VST3 right now so I’m going to look into that. The implementation of the model was fairly minimal using a basic array as a delay line and using neodsp’s <code class="inline">simper-filter</code>  as starting point for the filter.</p>
+<h2>
+Delay Line</h2>
+<p>
+A basic delay line just requires some container class that can be written to at one point and read from another point N samples prior. For my implementation I used a basic array. A vector could be used to have dynamic memory size. However since I am aiming towards an embedded version of this effect, I’d rather have set memory bounds.</p>
+<p>
+The buffer is declared as</p>
+<pre><code class="rust">#[derive(Debug, Copy, Clone)]
+pub struct DelayLine&lt;T&gt;{
+    pub amount: usize,
+    buffer: [T; MAX_LENGTH],
+    wp: usize,
+    y0: T
+}</code></pre>
+<p>
+Then we can write and read samples using <code class="inline">pop</code> and <code class="inline">push</code> methods. The struct keeps track of a write pointer, and calculates a read pointer which is N samples behind the write head.</p>
+<pre><code class="rust">impl&lt;&#39;a, T: std::marker::Copy + Float + Default + FromPrimitive + &#39;a&gt; DelayLine&lt;T&gt;{
+    pub fn new() -&gt; Self{
+        Self{
+            amount: 0,
+            buffer: [T::default(); MAX_LENGTH],
+            wp: 0,
+            y0: T::default()
+        }
+    }
+    pub fn push(&amp;mut self, data: T){
+        self.buffer[self.wp] = data;
+        self.wp = (self.wp + 1) % MAX_LENGTH;
+    }
+    pub fn pop(&amp;mut self) -&gt; T{
+        let rp: isize = (self.wp as isize) - (self.amount as isize);
+        self.y0 = self.buffer[wrap_value(rp)];
+        self.y0
+    }
+}</code></pre>
+<p>
+The <code class="inline">wrap_value</code> function just sets the read pointer to a valid index:</p>
+<pre><code class="rust">fn wrap_value(v: isize) -&gt; usize{
+    if v &lt; 0{
+        ((v + MAX_LENGTH as isize) as usize) % MAX_LENGTH
+    }
+    else{
+        (v as usize) % MAX_LENGTH
+    }
+}</code></pre>
+<p>
+Then to adjust the delay length I added a method to set from a frequency value:</p>
+<pre><code class="rust">pub fn set_frequency(&amp;mut self, f: f32, sampling: f32){
+        let delay = sampling / f;
+        self.amount = delay.round() as usize;
+        if self.amount &gt;= MAX_LENGTH{
+            self.amount = MAX_LENGTH - 1;
+        }
+    }</code></pre>
+<h2>
+Filter</h2>
+<p>
+The filter implementation is fairly simple, because I’m using an existing filter class. It’s wrapped in a generic object, so that I can play with some other filter objects. The trait sets up the basic interface for the filter:</p>
+<pre><code class="rust">pub trait Filter&lt;F: Float + Default&gt;{
+    fn tick(&amp;mut self, _input: F) -&gt; F {
+        /* Input one sample into filter and get result */
+        F::default() 
+    } 
+    fn set_cutoff(&amp;mut self, _cutoff: F){
+        /* Set the cutoff frequency of the filter */
+        ()
+    }
+    fn set_q(&amp;mut self, _q: F){
+        /* Set the resonance of the filter */
+        ()
+    }
+}</code></pre>
+<p>
+Although some filters might call for more setters, for most low performance cost filters, this will work fine. </p>
+<p>
+For the Simper Filter, wrapping an <code class="inline">Svf</code> object is straightforward I use a struct with the parameters:</p>
+<pre><code class="rust">#[derive(Default, Clone)]
+pub struct FilterSetting&lt;F: Float + Copy&gt;{
+    pub filter_type: FilterType,
+    pub sample_rate: F,
+    pub cutoff: F,
+    pub q: F,
+    pub gain: F
+}
+
+impl&lt;F: Float + Default&gt; FilterSetting&lt;F&gt;{
+    pub fn to_svf_coeff(&amp;self) -&gt; SvfCoefficients&lt;F&gt;{
+        let mut coeffs = SvfCoefficients::default();
+        let _result = coeffs.set(self.filter_type.clone(), self.sample_rate, self.cutoff, self.q, self.gain);
+        coeffs
+}</code></pre>
+<p>
+And then add a method to update the filter:</p>
+<pre><code class="rust">fn set(&amp;mut self){
+    self.filter.set_coeffs(self.setting.to_svf_coeff());
+}</code></pre>
+<p>
+Then the trait implementation looks like this:</p>
+<pre><code class="rust">impl&lt;F: Float + Default&gt; Filter&lt;F&gt; for SimperFilter&lt;F&gt;{
+    fn tick(&amp;mut self, input: F) -&gt; F {
+        self.filter.tick(input)   
+    }
+    fn set_cutoff(&amp;mut self, cutoff: F) {
+        self.setting.cutoff = cutoff;
+        self.set(); 
+    }
+    fn set_q(&amp;mut self, q: F) {
+        self.setting.q = q;
+        self.set();
+    }
+}</code></pre>
+<h2>
+NIH Plugin</h2>
+<p>
+With those two building blocks done, I can create an audio plugin. I use the <code class="inline">NIH-plugin</code> framework which can generate CLAP and VST3 plugins.  I used the </p>
+<p>
+<a href="https://github.com/robbert-vdh/nih-plug/tree/master/plugins/examples/gain">gain example</a> as a starting point.</p>
+<p>
+For a VST which transforms audio-&gt;audio (i.e. no real midi processing), the plugin has to provide the params, which appear to the DAW as controls. And the core audio processing step.</p>
+<p>
+I set each “string” as it’s own struct. This just combines a delay line with a filter with a an easy way to process an incoming sample.</p>
+<pre><code class="rust">#[derive(Debug, Copy, Clone)]
+pub struct Model&lt;F: Float + Default, ModelFilter: Filter&lt;F&gt;&gt;{
+    pub filter: ModelFilter,
+    pub delay: DelayLine&lt;F&gt;
+}
+
+impl&lt;F: Float + Default + FromPrimitive, ModelFilter: Filter&lt;F&gt; + Default&gt;Default for Model&lt;F, ModelFilter&gt;{
+    fn default() -&gt; Self {
+        let f = ModelFilter::default();
+        Self{
+            filter: f,
+            delay: DelayLine::new()
+        }
+    }
+}
+
+impl&lt;F: Float + Default + FromPrimitive, ModelFilter: Filter&lt;F&gt;&gt; Model&lt;F, ModelFilter&gt;{
+    pub fn process(&amp;mut self, input: F) -&gt; F{
+        /* Process one sample */
+        // Get delayed sample
+        let delay_out = self.delay.pop();
+        // Filter delayed sample
+        let f_result = self.filter.tick(delay_out);
+
+        // Combine input and filtered result into start of delay
+        let delay_result = f_result + input;
+        self.delay.push(delay_result);
+
+        // Return delayed sample
+        delay_out
+    }
+}</code></pre>
+<p>
+In the top-level <code class="inline">lib.rs</code>, the actual plugin contains a pointer to the <code class="inline">Params</code>, and a array of four strings. I also have an oscillator which can be used to change the string tuning over time.</p>
+<pre><code class="rust">const NUM_STRINGS: usize = 4;
+
+struct StringModel{
+    params: Arc&lt;StringParams&gt;,
+    model: [Model&lt;f32, SimperFilter&lt;f32&gt;&gt;; NUM_STRINGS],
+    lfo: lfo::LFO
+}</code></pre>
+<p>
+If I wanted to experiment with other filters, I can drop in a struct with my filter.</p>
+<p>
+For the parameters, the plugin provides controls for dry and wet gain, lfo controls and the base note of the resonator strings. Each string has a gain, offset pitch and filter controls.</p>
+<pre><code class="rust">#[derive(Params)]
+struct StringParams{
+    #[id = &quot;dry&quot;]
+    pub dry: FloatParam,
+
+    #[id = &quot;wet&quot;]
+    pub wet: FloatParam,
+
+    #[id = &quot;note&quot;]
+    pub base: IntParam,
+
+    #[id = &quot;lfo rate&quot;]
+    pub lfo_rate: FloatParam,
+
+    #[id = &quot;lfo depth&quot;]
+    pub lfo_depth: FloatParam,
+
+    #[nested(array, group = &quot;String Parameters&quot;)]
+    pub element_params: [ElementParams; NUM_STRINGS]
+
+}
+
+#[derive(Params)]
+struct ElementParams{
+    #[id = &quot;gain&quot;]
+    pub gain: FloatParam,
+    #[id = &quot;offset&quot;]
+    pub offset: IntParam,
+    #[id = &quot;Cutoff&quot;]
+    pub cutoff: FloatParam,
+    #[id = &quot;Q&quot;]
+    pub q: FloatParam
+}</code></pre>
+<p>
+The range and type of each parameter are set in the Default implementation. Because I have a few gain controls, I added a function to setup a control which is shown in dB but  provides a logarithmically mapped value.</p>
+<pre><code class="rust">fn db_param(name: &amp;str, min: f32, max: f32) -&gt; FloatParam{
+    FloatParam::new(
+        name,
+        util::db_to_gain(0.0),
+        FloatRange::Skewed { 
+            min: util::db_to_gain(min), 
+            max: util::db_to_gain(max), 
+            factor: FloatRange::gain_skew_factor(min, max) }
+    )
+    .with_smoother(SmoothingStyle::Logarithmic(50.0))
+    .with_unit(&quot; dB&quot;)
+    .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+    .with_string_to_value(formatters::s2v_f32_gain_to_db())
+}</code></pre>
+<p>
+The implementation for the controls looks like this.</p>
+<pre><code class="rust">impl Default for StringParams{
+    fn default() -&gt; Self {
+        Self{
+            dry: db_param(&quot;dry&quot;, -60.0,20.0),
+            wet: db_param(&quot;wet&quot;, -60.0,20.0),
+            base: IntParam::new(&quot;Note base&quot;, 0, IntRange::Linear { min: -44, max: 44 }),
+            lfo_rate: FloatParam::new(&quot;Lfo Rate&quot;, 1.0, FloatRange::Linear { min: 0.1, max: 30.0 }),
+            lfo_depth: FloatParam::new(&quot;Lfo Depth&quot;, 0.0, FloatRange::Linear { min: 0.0, max: 5.0 }),
+            element_params: Default::default()
+        }
+    }
+}
+
+
+impl Default for ElementParams{
+    fn default() -&gt; Self {
+        Self{
+            gain: db_param(&quot;gain&quot;, -30.0, 0.0),
+            offset: IntParam::new(&quot;Note offset&quot;, 0, 
+                IntRange::Linear { min: 0, max: 36 }),
+            cutoff: FloatParam::new(&quot;Cutoff&quot;, 440.0,
+                    FloatRange::Linear { min: 10.0, max: 22000.0 }),
+            q: FloatParam::new(&quot;Q&quot;, 0.771, FloatRange::Linear { min: 0.5, max: 1.0 })
+        }
+    }
+}</code></pre>
+<p>
+Most of the plugin resembles the gain plugin, but the audio process step consists of retrieving control values, and then processing through each string resonator. There’s no real optimizations here, but the core processing of each sample is fairly fast.</p>
+<pre><code class="rust">fn process(
+    &amp;mut self,
+    buffer: &amp;mut Buffer,
+    _aux: &amp;mut AuxiliaryBuffers,
+    _context: &amp;mut impl ProcessContext&lt;Self&gt;,
+) -&gt; ProcessStatus {
+    for channel_samples in buffer.iter_samples
+(){
+
+        let wet_gain = self.params.wet.smoothed.next();
+        let dry_gain = self.params.dry.smoothed.next();
+
+        self.lfo.amount = self.params.lfo_depth.smoothed.next();
+        self.lfo.set_freq(self.params.lfo_rate.smoothed.next());
+
+        let mut elem_gain = [0.0; NUM_STRINGS];
+
+        for i in 0..self.model.len(){
+            elem_gain[i] = wet_gain * self.params.element_params[i].gain.smoothed.next();
+            self.model[i].filter.set_cutoff(self.params.element_params[i].cutoff.smoothed.next());
+            self.model[i].filter.set_q(self.params.element_params[i].q.smoothed.next());
+        }
+
+        // Base note of delay
+        let base_note = self.params.base.smoothed.next();
+
+        let mut note = [0.0; NUM_STRINGS];
+
+        // Each element
+        for i in 0..self.model.len(){
+            note[i] = (base_note + self.params.element_params[i].offset.smoothed.next()) as f32;
+        }
+
+        // Process each sample
+        for sample in channel_samples{
+            let dry_value = *sample;
+            *sample = dry_gain * dry_value;
+            let lfo_value = self.lfo.next();
+
+            for i in 0..self.model.len(){
+                self.model[i].delay.set_frequency(note_to_freq(note[i] + lfo_value, 440.0), 441000.0);
+                *sample += (elem_gain[i]) * self.model[i].process(dry_value);
+            }
+
+            // Clip
+            if *sample &lt; -1.0{
+                *sample = 0.0;
+            }
+            if *sample &gt; 1.0{
+                *sample = 1.0;
+            }
+        }
+    }
+    ProcessStatus::Normal
+}</code></pre>
+<p>
+I am holding off on writing the front end, but this is functional. I did use <a href="https://github.com/free-audio/clap-validator">Free-audio’s CLAP validator</a> to get some basic logging information about the device. I’m not sure if any DAW provides easy to find logging information. When I initially tried running the plugin, it crashed immediately. I had to reduce the delay line max size to prevent it from using more stack memory than is allocated for the plugin. Using a vec would get around this (allocated to heap). For this plugin, the maximum delay is relatively short, as it should be in audible range.</p>
+<p>
+Without a frontend, most daws render plugins with slider/dropdown widgets.</p>
+<p>
+  <img src="C:UsersmagenDocumentsBlogResourcesstring_resonancebasic_clap.png" alt="basic_clap.png">
+ap.png)</p>
+<h2>
+Build details</h2>
+<p>
+The NIH Plugin crate can be added to <code class="inline">Cargo.toml</code></p>
+<pre><code class="toml">[dependencies]
+nih_plug = { git = &quot;https://github.com/robbert-vdh/nih-plug.git&quot;, features = [&quot;assert_process_allocs&quot;] }
+parking_lot = &quot;0.12&quot;</code></pre>
+<p>
+In order to bundle into CLAP and VST, I used an xtask subproject, the main function runs from the <code class="inline">nih_plug_xtask</code> crate.</p>
+<pre><code class="rust">fn main() -&gt; nih_plug_xtask::Result&lt;()&gt; {
+    nih_plug_xtask::main()
+}</code></pre>
+<p>
+This can be added to the build in the top-level <code class="inline">Cargo.toml</code> with the workspace tag.</p>
+<pre><code class="toml">[workspace]
+members = [
+  &quot;xtask&quot;,
+]</code></pre>
+<p>
+Code and CLAP plugin are here: <a href="https://github.com/485angelprocess/string_resonator_plugin">GitHub - 485angelprocess/string_resonator_plugin: CLAP/VST Plugin modeling string resonance</a></p>
+
+
+    </div>
+  </body>
+</html>
