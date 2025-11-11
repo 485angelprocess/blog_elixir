@@ -5,7 +5,7 @@ config :esbuild,
   version: "0.25.0",
   default: [
     args:
-      ~w(app.js --bundle --target=es2017 --outdir=../output/assets --external:/fonts/* --external:/images/*),
+      ~w(app.js --bundle --target=es2017 --outdir=../docs/assets --external:/fonts/* --external:/images/*),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]
@@ -16,7 +16,7 @@ config :tailwind,
   default: [
     args: ~w(
       --input=css/app.css
-      --output=../output/assets/app.css
+      --output=../docs/assets/app.css
     ),
     cd: Path.expand("../assets", __DIR__)
   ]

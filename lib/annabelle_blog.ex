@@ -49,7 +49,7 @@ defmodule AnnabelleSite do
     end
 
   
-  @output_dir "./output"
+  @output_dir "./docs"
   File.mkdir_p!(@output_dir)
 
   def build() do
