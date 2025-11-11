@@ -28,10 +28,10 @@ defmodule AnnabelleBlog.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-    	{:nimble_publisher, "~> 1.0", runtime: false},
+    	{:nimble_publisher, "~> 1.1.1", runtime: false},
       {:makeup_elixir, ">= 0.0.0", runtime: false},
       {:makeup_erlang, ">= 0.0.0", runtime: false},
-      {:phoenix_live_view, "~> 1.1.0"},
+      {:phoenix_live_view, "~> 1.0.5"},
       {:esbuild, ">= 0.0.0"},
       {:tailwind, ">= 0.0.0"}  
     ]

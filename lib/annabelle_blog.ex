@@ -14,11 +14,16 @@ defmodule AnnabelleSite do
     def index(assigns) do
       ~H"""
       <.layout>
-        <h1 class="text-3xl font-bold underline">Annabelle Adelaide</h1>
+        <h1 class="text-3xl font-bold">Annabelle Adelaide</h1>
         <p>Embedded, hardware and FPGA engineer</p>
-        <ul>
-          <li :for={post <- @posts}>
+        <ul class="text-2x1">
+          <li class="p-4 b-sky"
+           :for={post <- @posts}>
+            <span>
+              <time><%= post.date %></time>
+            </span>
             <a href={post.path}> <%= post.title %> </a>
+            <%= Enum.join(post.tags, ", ") %>
           </li>
         </ul>
       </.layout>
@@ -32,6 +37,7 @@ defmodule AnnabelleSite do
         <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
         <link rel="stylesheet" href="/assets/app.css"/>
         <script type="text/javascript" src="/assets/app.js"/>
+        <meta charset="UTF-8">
       </head>
         <body>
           <div class="bg-linear-65 from-purple-500 to-pink-500">

@@ -22,11 +22,11 @@ I used the `rustyline` crate to handle user input. It provides a easy way to get
 ```rust
 enum ForthVal{
     Null,
-    Int(i64),
-    Float(i64),
-    Str(String),
-    Sym(String), // words
-    List(Vec<ForthVal>)
+    Int(i64),
+    Float(i64),
+    Str(String),
+    Sym(String), // words
+    List(Vec<ForthVal>)
 }
 ```
 
@@ -37,7 +37,7 @@ With each input I get a series of `ForthVal`, which can be interpreted in series
 ```rust
 struct WorkspaceContext{
     stack: Vec<ForthVal>,
-    reply: Vec<ForthVal>
+    reply: Vec<ForthVal>
 }
 ```
 
@@ -48,7 +48,7 @@ Next I need some basic words, from which more complex words can be compiled. I u
 ```rust
 enum ForthRoutine{
     Prim(Box<dyn Fn(&mut WorkspaceContext) -> ForthVal),
-    Compiled(Vec<ForthVal>)
+    Compiled(Vec<ForthVal>)
 }
 ```
 
@@ -86,7 +86,7 @@ pub fn setup(&mut self){
         }
     );
 
-    self.insert_box("+", math::binary_op(|a, b|{b+a}));
+    self.insert_box("+", math::binary_op(|a, b|{b+a}));
 }
 ```
 

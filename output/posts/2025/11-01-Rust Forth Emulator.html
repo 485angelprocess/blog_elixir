@@ -3,6 +3,7 @@
   <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/assets/app.css">
   <script type="text/javascript" src="/assets/app.js"></script>
+  <meta charset="UTF-8">
 </head>
   <body>
     <div class="bg-linear-65 from-purple-500 to-pink-500">
@@ -24,11 +25,11 @@ One of the ideas I got from Moore is that one of the cores of Forth is that it i
 I used the <code class="inline">rustyline</code> crate to handle user input. It provides a easy way to get terminal-interface features like history. From the terminal, I get an input string, which I separate into tokens. Tokens are put into several types, the base ones being immediates (ints, floats and strings) and words. What helps Forth work well is a minimal number of types, and making the data types reusable in different contexts. Data types are organized using an enum:</p>
 <pre><code class="rust">enum ForthVal{
     Null,
-    Int(i64),
-    Float(i64),
-    Str(String),
-    Sym(String), // words
-    List(Vec&lt;ForthVal&gt;)
+    Int(i64),
+    Float(i64),
+    Str(String),
+    Sym(String), // words
+    List(Vec&lt;ForthVal&gt;)
 }</code></pre>
 <h2>
 Interpreter</h2>
@@ -36,7 +37,7 @@ Interpreter</h2>
 With each input I get a series of <code class="inline">ForthVal</code>, which can be interpreted in series. Each of these values can read or write from some work context, which needs a stack at minimum. The interpreter should provide some printable reply, I have this as a vector of <code class="inline">ForthVal</code> which is written to with each line, and then printed. Each <code class="inline">ForthVal</code> type is printable with a simple call.</p>
 <pre><code class="rust">struct WorkspaceContext{
     stack: Vec&lt;ForthVal&gt;,
-    reply: Vec&lt;ForthVal&gt;
+    reply: Vec&lt;ForthVal&gt;
 }</code></pre>
 <p>
 Any immediate types are placed on the stack, and then words can pop from the stack as needed. Eventually, I want to add features for argument and variable support to the context, but that should be fairly straightforward to add.</p>
@@ -44,7 +45,7 @@ Any immediate types are placed on the stack, and then words can pop from the sta
 Next I need some basic words, from which more complex words can be compiled. I used a separate enum:</p>
 <pre><code class="rust">enum ForthRoutine{
     Prim(Box&lt;dyn Fn(&amp;mut WorkspaceContext) -&gt; ForthVal),
-    Compiled(Vec&lt;ForthVal&gt;)
+    Compiled(Vec&lt;ForthVal&gt;)
 }</code></pre>
 <p>
 Primitives are stored as a pointer to a trait which implements a function which modifies the workspace and returns data. Compiled programs are stored as a vector of ForthVals, which can be run as needed. </p>
@@ -79,7 +80,7 @@ pub fn setup(&amp;mut self){
         }
     );
 
-    self.insert_box(&quot;+&quot;, math::binary_op(|a, b|{b+a}));
+    self.insert_box(&quot;+&quot;, math::binary_op(|a, b|{b+a}));
 }</code></pre>
 <p>
 This gives an idea of the setup. <code class="inline">dup</code> is a static function which duplicates the top of the stack. <code class="inline">clear</code> clears the stack. <code class="inline">+</code> adds the top two values on the static. I do some wrappers on arithmetic to handle multiple types. Now with I can do basic calculation:</p>
