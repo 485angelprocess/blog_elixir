@@ -12,9 +12,9 @@
   <h1>
 Getting UEFI support</h1>
 <p>
-This is the start of doing some OS work with nim. I’m using the really great documentation of (fusion os)[<a href="https://0xc0ffee.netlify.app/osdev/]">https://0xc0ffee.netlify.app/osdev/]</a> as a starting point.</p>
-<h3>
-Getting UEFI with C</h3>
+This is the start of doing some OS work with nim. I’m using the really great documentation of <a href="https://0xc0ffee.netlify.app/osdev/">fusion os</a> as a starting point.</p>
+<h2>
+Getting UEFI with C</h2>
 <p>
 Since I’m interested in going through some of the work with Fusion OS, I am running an OS that has UEFI support. UEFI offers a unified interface for bootstrapping an OS.</p>
 <p>
@@ -34,8 +34,8 @@ This has the <code class="inline">no-std flag</code>, explicitly sets the main e
 <p>
 To check the file format:</p>
 <pre><code>file build/main.exe</code></pre>
-<h3>
-UEFI with nim</h3>
+<h2>
+UEFI with nim</h2>
 <p>
 I start with a minimal nim function:</p>
 <pre><code class="nim">proc main(): int {.exportc.} =

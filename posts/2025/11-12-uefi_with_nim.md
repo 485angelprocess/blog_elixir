@@ -8,9 +8,9 @@
 
 # Getting UEFI support
 
-This is the start of doing some OS work with nim. I'm using the really great documentation of (fusion os)[https://0xc0ffee.netlify.app/osdev/] as a starting point.
+This is the start of doing some OS work with nim. I'm using the really great documentation of [fusion os](https://0xc0ffee.netlify.app/osdev/) as a starting point.
 
-### Getting UEFI with C
+## Getting UEFI with C
 
 Since I'm interested in going through some of the work with Fusion OS, I am running an OS that has UEFI support. UEFI offers a unified interface for bootstrapping an OS.
 
@@ -36,7 +36,7 @@ To check the file format:
 file build/main.exe
 ```
 
-### UEFI with nim
+## UEFI with nim
 
 I start with a minimal nim function:
 
