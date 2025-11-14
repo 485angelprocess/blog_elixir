@@ -7,7 +7,7 @@
 ---
 # UEFI Bootloader using nim
 
-This is mostly following (Fusion OS)[https://0xc0ffee.netlify.app/osdev]. I'm interested in going through
+This is mostly following [Fusion OS](https://0xc0ffee.netlify.app/osdev). I'm interested in going through
 to pick up both some os ideas and learn nim in a deeper way.
 
 ## Entry point
