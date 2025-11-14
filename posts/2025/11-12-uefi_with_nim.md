@@ -1,7 +1,7 @@
 %{
     title: "UEFI Support with Nim",
     author: "Annabelle Adelaide",
-    tags: ~w(nim,os),
+    tags: ~w(nim,os,uefi),
     description: "Building a PE32+ application with nim/nostd"
 }
 ---
