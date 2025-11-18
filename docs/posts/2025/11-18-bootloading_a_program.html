@@ -12,6 +12,13 @@
   <h1>
 Booting into a program</h1>
 <p>
+After getting the skeleton of a UEFI bootloader up, I need to give it something to load. The overall
+goal is to have the bootloader load a program into memory at the correct address so that it loads, and
+give it the tools to write to a console. This post is still following along the Khaled Hammouda’s really
+great documentation of their os project <a href="https://0xc0ffee.netlify.app/osdev/">here</a>.</p>
+<p>
+For work getting the bootloader up see my previous posts <a href="https://annabelleadelai.de/posts/2025/11-12-uefi_with_nim.html">part1</a> and <a href="https://annabelleadelai.de/posts/2025/11-13-uefi_pt2.html">part2</a></p>
+<p>
 The bootloader is running enough to create some framework for the kernel. After reorganizing some files,
 my directory tree is looking like this:</p>
 <pre><code>.
