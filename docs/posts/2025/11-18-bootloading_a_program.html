@@ -1,0 +1,172 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+  <meta charset="UTF-8">
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h1>
+Booting into a program</h1>
+<p>
+The bootloader is running enough to create some framework for the kernel. After reorganizing some files,
+my directory tree is looking like this:</p>
+<pre><code>.
+├── justfile
+├── nim.cfg
+└── src
+    ├── boot
+    │   ├── bootx64.nim
+    │   └── nim.cfg
+    ├── common
+    │   ├── libc.nim
+    │   ├── malloc.nim
+    │   └── uefi.nim
+    ├── debugcon.nim
+    └── kernel
+        ├── main.nim
+        └── nim.cfg</code></pre>
+<p>
+The nim configurations are split for their target. This is a nice feature of nim for organizing projects.
+I added a kernel target for the <code class="inline">justfile</code> to create a binary:</p>
+<pre><code class="just">nimflags := &quot;--os:any&quot;
+
+bootloader:
+  nim c {{nimflags}} --out:build/bootx64.efi src/boot/bootx64.nim
+
+kernel:
+  nim c {{nimflags}} --out:build/kernel.bin src/kernel/main.nim
+
+run: bootloader
+  mkdir -p diskimg/efi/boot
+  cp build/bootx64.efi diskimg/efi/boot/bootx64.efi
+  qemu-system-x86_64 \
+      -machine q35 \
+      -drive if=pflash,format=raw,readonly=on,file=/usr/share/ovmf/OVMF.fd \
+      -drive format=raw,file=fat:rw:diskimg \
+      -net none</code></pre>
+<p>
+<code class="inline">debugcon.nim</code> is an interface for the qemu debug console. Once the bootloader finishes, there is no
+longer access to the uefi console, and it would be more complex to write a serial driver to start. Qemu
+offers an easy debug port which can be written to through memory:</p>
+<pre><code class="nim">const
+  DebugConPort = 0xE9
+
+proc portOut8(port: uint16, data: uint8) =
+  asm &quot;&quot;&quot;
+    out %0, %1
+    :
+    :&quot;Nd&quot;(`port`), &quot;a&quot;(`data`)
+  &quot;&quot;&quot;
+
+proc debug*(msgs: varargs[string]) =
+  ## Send messages to the debug console.
+  for msg in msgs:
+    for ch in msg:
+      portOut8(DebugConPort, ch.uint8)
+
+proc debugln*(msgs: varargs[string]) =
+  ## Send messages to the debug console. A newline is appended at the end.
+  debug(msgs)
+  debug(&quot;\r\n&quot;)</code></pre>
+<p>
+Note that nim initially complains about the assembly, saying that the there is an unkown mnemonic.
+I added <code class="inline">--passc:&quot;-masm=intel&quot;</code> to interpret assembly in the intel syntax, which fixed the issue.</p>
+<p>
+I added some additional flags to <code class="inline">src/kernel/nim.cfg</code>. First turning off special registers with the <code class="inline">-mgeneral-regs-only</code> switch,
+and then disabling an automatic stack frame with <code class="inline">-mno-red-zone</code>.
+The red zone is a scratch space made by the compiler when a function doesn’t call anything.
+The CPU will reuse this space in kernel mode, causing two sets of overlapping data in the memory space.</p>
+<p>
+The <code class="inline">nim.cfg</code> looks like this:</p>
+<pre><code>amd64.any.clang.linkerexe=&quot;ld.lld&quot;
+--passc:&quot;-mgeneral-regs-only&quot;
+--passc:&quot;-mno-red-zone&quot;
+--passc:&quot;-target x86_64-unknown-elf&quot;
+--passc:&quot;-masm=intel&quot;
+--passc:&quot;-ffreestanding&quot;
+--passl:&quot;-nostdlib&quot;
+--passl:&quot;-Map=build/kernel.map&quot;
+--passl:&quot;-entry KernelMain&quot;</code></pre>
+<p>
+Running <code class="inline">just kernel</code> produces a binary file. The elf information can be shown with <code class="inline">llvm-readelf --headers</code>. 
+This elf file isn’t quite right. The compiler needs some additional linking information, so that it loads
+in the right location.</p>
+<p>
+I can add a linker file in <code class="inline">src/kernel/kernel.ld</code></p>
+<pre><code>SECTIONS
+{
+  . = 0x100000
+  .text : { *(.text) }
+  .rodata : { *(.rodata*) }
+  .data : { *(.data) }
+  .bss : { *(.bss) }
+
+  /DISCARD/ : { *(*) }
+}</code></pre>
+<p>
+Adding this and the <code class="inline">-passl:&quot;-T src/kernel/kernel.ld&quot;</code> argument creates an elf file which has an entry point
+of <code class="inline">0x10B800</code>. Which is closer, but the linker is putting the <code class="inline">.text</code> section before the code we want to start into.
+I have to find the kernel object and then throw it ahead of <code class="inline">.text</code>:</p>
+<pre><code>SECTIONS
+{
+  . = 0x100000;
+  .text     : { *main*.o(.text) *(.text) }
+  .rodata   : { *(.rodata*) }
+  .data     : { *(.data) }
+  .bss      : { *(.bss) }
+  .shstrtab : { *(.shstrtab) }
+
+  /DISCARD/ : { *(*) }
+}</code></pre>
+<p>
+From what I can infer I want to match based on the name of my nim file (which is here <code class="inline">main</code>). This seems a little fraught,
+as it would be easy to have a hanging object file with a similar name, which would cause problems.
+But it’s also not quite easy to guess how the compiler creates the object file.</p>
+<p>
+I can check that this maps to the start of binary file:</p>
+<pre><code class="bash">$ head -n 10 build/kernel.map
+    VMA              LMA     Size Align Out     In      Symbol
+        0                0   100000     1 . = 0x100000
+   100000           100000     b3e2    16 .text
+   100000           100000      270    16         /home/anne/Documents/os/m os/build/@mmain.nim.c.o:(.text)
+   100000           100000       89     1                 KernelMain
+   100090           100090       86     1                 nimFrame
+   100120           100120       17     1                 nimErrorFlag
+   100140           100140       a9     1                 quit__system_u6454
+   1001f0           1001f0       17     1                 popFrame
+   100210           100210        6     1                 NimDestroyGlobals</code></pre>
+<p>
+I got a lot of the format working for the binary, but was having trouble getting the linker to recognize the <code class="inline">.bss</code>
+section, or specifically to allocate the empty heap.</p>
+<p>
+I tried a few options like moving <code class="inline">.bss</code> into the <code class="inline">.data</code> section, and adding a dummy section with a defined size after <code class="inline">.bss</code>.
+But nothing was working. Turns out I had <code class="inline">-oformat=binary</code> instead of <code class="inline">--oformat-binary</code>, in the <code class="inline">nim.cfg</code>.</p>
+<pre><code>{
+  . = 0x100000;
+  .text     : {
+    *main*.o(.text.KernelMain)
+    *main*.o(.text.*)
+    *(.text.*)
+  }
+  .rodata   : { *(.rodata*) }
+  .data     : { *(.data) *(.bss) }
+  .shstrtab : { *(.shstrtab) }
+
+  /DISCARD/ : { *(*) }
+}</code></pre>
+<p>
+This starts data at <code class="inline">0x100000</code>, finds the entry point, and then defines the sections. The binary output
+file is now the correct size:</p>
+<pre><code class="bash">$ wc -c build/kernel.bin
+1099760 build/kernel.bin</code></pre>
+<p>
+Now that I have a binary format I can use, I can start putting some real kernel operations in.</p>
+
+
+    </div>
+  </body>
+</html>
