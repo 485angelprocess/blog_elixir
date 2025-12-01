@@ -1,0 +1,93 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+  <meta charset="UTF-8">
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h1>
+Setting up Verilator for SystemVerilog</h1>
+<p>
+I have used a good amount of SystemVerilog for working on FPGA projects. At a certain level of abstraction
+my eyes start to glaze over with how it handles functions and modules. To me, a simple verilog user,
+it’s becomes layers of imports and macros that are hard to parse. To that end, I wanted to give myself
+some focused space to work on it. <code class="inline">verilator</code> is an open source simulator and linter. Verilators documentation is
+at [<a href="https://verilator.org]">https://verilator.org]</a></p>
+<h2>
+Install</h2>
+<p>
+I run ubuntu, so this was a simple <code class="inline">apt-get install verilator</code>. I already have gtkwave installed as well.</p>
+<h2>
+Minimal demo</h2>
+<p>
+I started with a simple hello world to get an understanding of the verilator workflow.</p>
+<pre><code class="verilog">// hello.v
+module hello;
+  initial begin $display(&quot;Hello world&quot;); $finish; end
+endmodule</code></pre>
+<p>
+To build a c++ simulation file, run:</p>
+<pre><code class="bash">$ verilator --binary -j 0 -Wall hello.v</code></pre>
+<p>
+and run:</p>
+<pre><code class="bash">$ obj_dir/Vhello
+Hello world
+- hello.v:2 Verilog $finish</code></pre>
+<p>
+Since I was recently introduced to <code class="inline">just</code> and hate writing making files, I wrote a quick <code class="inline">justfile</code> to run
+and build with verilator:</p>
+<pre><code class="just">build target:
+    verilator --binary -j 0 -Wall {{target}}.v
+
+run target: (build target)
+    obj_dir/V{{target}}</code></pre>
+<p>
+Now I can run:</p>
+<pre><code>$ just run hello</code></pre>
+<p>
+and it build and runs :). Not handling every case right now, but nice for my purposes.
+Looking at what <code class="inline">verilator</code> is doing internally, it is essentially just building a c++ project with
+auto-generated headers and a object which rnus through the verilog file.</p>
+<h2>
+C++ exectuion</h2>
+<p>
+I can also call my translated SystemVerilog from a C++ wrapper. I put it in a file <code class="inline">sim_main.cpp</code>:</p>
+<pre><code class="c++">#include &quot;Vhello.h&quot;
+#include &quot;verilated.h&quot;
+
+int main(int argc, char** argv){
+  // Create context
+  VerilatedContext* contextp = new VerilatedContext;
+  contextp-&gt;commandArgs(argc, argv);
+
+  // Create instance of the inner verilog object
+  Vhello* top = new Vhello{contextp};
+
+  // Run
+  while (!contextp-&gt;gotFinish()){
+    top-&gt;eval();
+  }
+
+  // Cleanup
+  delete top;
+  delete contextp;
+  return 0;
+}</code></pre>
+<p>
+I can add some lines to my <code class="inline">justfile</code>:</p>
+<pre><code class="just">cpp wrapper target:
+    verilaor --cc --exe --build -j 0 -Wall {{wrapper}} {{target}}.v
+
+runcpp wrapper target: (cpp wrapper target)
+    obj_dir/V{{target}}</code></pre>
+<p>
+Running <code class="inline">just runcpp sim_main.cpp hello</code>, builds and runs the program.</p>
+
+
+    </div>
+  </body>
+</html>
