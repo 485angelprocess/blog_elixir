@@ -1,0 +1,141 @@
+<html>
+<head>
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="text/javascript" src="/assets/app.js"></script>
+  <meta charset="UTF-8">
+</head>
+  <body>
+    <div class="bg-linear-65 from-purple-500 to-pink-500">
+    
+  <a href="/../index.html">home</a>
+  <h1>
+Forth machine - Basic setup</h1>
+<p>
+A project I’ve been revolving in my head for a long time is a forth core design.</p>
+<p>
+The core should be completely ergonmic for forth, a stack based functional language.</p>
+<p>
+There are some takeaways I want to get from other projects:</p>
+<ul>
+  <li>
+<a href="https://github.com/lfnoise/sapf">sapf</a> forms for repeatable set up, as well as lazy lists  </li>
+  <li>
+<a href="https://github.com/mitranim/astil_forth">astil_forth</a> error handling forth  </li>
+  <li>
+<a href="https://github.com/hoytech/frugal">frugal</a> minimal forth implementation  </li>
+</ul>
+<p>
+My higher goal is to develop multiprocessor set up for exploring digital video synthesis without the poor implemnentation of glsl.</p>
+<h2>
+First steps</h2>
+<p>
+I’m busy a lot right now, so I’m incrementally building this up.</p>
+<p>
+My start is to design the control loop. This is the human-centered basis of a forth interpreter.</p>
+<p>
+For my purposes:</p>
+<ul>
+  <li>
+Reads character input into a line buffer  </li>
+  <li>
+Looks up each word in the function buffer  </li>
+  <li>
+Runs that function  </li>
+</ul>
+<p>
+I’m starting with just this first step.</p>
+<p>
+Now the bootstrapping of this system should be done within the system.
+I start with a simulation of the system which can create a compiled program, loaded onto a real hardware system which can do the same.</p>
+<p>
+General constraints:</p>
+<ul>
+  <li>
+Functions return 1 value, take max 3 arguments  </li>
+</ul>
+<h2>
+Very basics</h2>
+<p>
+First I need to way to test the simulator works in order to bootstrap a compiler.</p>
+<p>
+First test:</p>
+<pre><code>1 assert</code></pre>
+<p>
+This requires a minimal control loop and the assertion function.</p>
+<h2>
+Interpreter loop</h2>
+<p>
+So for bootstrapping I need a function which transforms any int to the instructions needed to place that immediate onto the stack.</p>
+<p>
+As a simple start point the core has two immediate instructions for bytes and words.</p>
+<pre><code class="forth">: interpret
+  searchfunc if call ret then \ Looks up in dictionary
+  isint  if imm  ret then \ Adds imm to stack
+  INTERPRET_ERROR error
+;</code></pre>
+<p>
+These functions might be broken down further, for now they are easy enough to write for simulation and I’m not trying to get too bogged down.</p>
+<p>
+As a simple python setup:</p>
+<pre><code class="python">@staticmethod
+def interpret(ctx: ForthContext):
+    # Call function
+    id = BaseLibrary.searchfunc(ctx)
+    if id &gt; 0:
+        ctx.push(id)
+        BaseLibrary.call(ctx)
+        return
+
+    # Immediate
+    if BaseLibrary.isint(ctx):
+        ctx.trace(f&quot;{ctx.word}&quot;)
+        ctx.push(BaseLibrary.imm(ctx))
+        return</code></pre>
+<p>
+This doesn’t quite use the stack and registers as tidy as I’d want but a start.</p>
+<p>
+I add another simple test:</p>
+<pre><code class="forth">1 2 + 3 == assert \ Addition</code></pre>
+<h2>
+Define</h2>
+<p>
+Next I need a way to define new functions. For an easy control loop, I just added a conditional check:</p>
+<pre><code class="forth">: interpret
+  isdefine if define ret then \ Defines new words
+  searchfunc if call ret then \ Looks up in dictionary
+  isint  if imm  ret then \ Adds imm to stack
+  INTERPRET_ERROR error
+;</code></pre>
+<p>
+The define function could be a separate function pointer which is moved, which may save cycles in the loop.</p>
+<p>
+I use a register for the <code class="inline">DEFINE_STATE</code> which tracks if I am defining the label or the function, and should also help with the function comment.</p>
+<p>
+For each word:</p>
+<ul>
+  <li>
+‘:’ is a function which sets the define state to <code class="inline">label</code>  </li>
+  <li>
+if define state is <code class="inline">label</code> store this word as the name of function. Set the state to <code class="inline">functions</code> (could add comments here)  </li>
+  <li>
+if define state is <code class="inline">functions</code>, append the functions or immediates to a buffer  </li>
+  <li>
+<code class="inline">;</code> defines a new function, it’s name is added to the dictionary and the functions are stored to the main function body. Exits the define mode.  </li>
+</ul>
+<p>
+Now I can test with:</p>
+<pre><code class="forth">: square dup * ;
+4 square 16 == assert</code></pre>
+<p>
+So I have enough baseline functionality to lookup immediates and functions and to define new words.</p>
+<p>
+Next steps are to add assembly instructions which can bootstrap this control loop onto special hardware.
+Then test using a hardware sim.</p>
+<p>
+I might pursue the same for risc-v for some flexibility in hardware targets as well.</p>
+
+
+    </div>
+  </body>
+</html>

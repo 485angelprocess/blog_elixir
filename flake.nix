@@ -17,9 +17,12 @@
           git
           elixir
           mix2nix
+          tailwindcss
         ];
 
-        shellHook = "";
+        shellHook = ''
+          export TAILWINDCSS_PATH="${pkgs.lib.getExe pkgs.tailwindcss_4}"
+        '';
       };
     };
 }

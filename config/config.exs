@@ -11,12 +11,14 @@ config :esbuild,
   ]
 
 # Configure tailwind (the version is required)
+# https://discourse.nixos.org/t/cannot-run-tailwind-css-with-elixir-phoenix-1-8-project/69651/5
 config :tailwind,
-  version: "4.1.12",
+  version: "4.3.0",
   default: [
     args: ~w(
       --input=css/app.css
       --output=../docs/assets/app.css
     ),
     cd: Path.expand("../assets", __DIR__)
-  ]
+  ],
+  path: System.get_env("TAILWINDCSS_PATH")
